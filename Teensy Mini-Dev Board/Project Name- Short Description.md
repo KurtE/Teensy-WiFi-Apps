@@ -9,7 +9,7 @@ The selection of the weather city is via the Serial monitor or a display keyboar
 
 ## 📌 Pin Wiring Connections
 
-Nonea as the Mini Platform is self contained.
+None as the Mini Platform is self contained.
 
 ## 📦 Required Libraries
 * **ST7796_t3 library** pre-installed when you install Teensy via Board Manager or via Teensyduino
