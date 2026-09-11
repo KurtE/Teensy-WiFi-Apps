@@ -1,11 +1,11 @@
 /**********************************************
 *  Setup display and touch
 ***********************************************/
-//#define ILI9488_DISP // esle ST7796
-//#define XPT_TOUCH  //else FT6236
+//#define ILI9488_DISP // else ST7796
+#define XPT_TOUCH  //else FT6236
 #define USE_KEYBOARD
-//#define printForecast
-#define orientation 3  // or 1 (landscape)
+#define printForecast
+#define orientation 1  // or 1 (landscape)
 
 String DEFAULT_CITY = "Disneyland"; // Default startup city
 /*********************************************
@@ -27,7 +27,7 @@ JsonDocument doc;
 #endif
 
 // Pin assignments (adjust to your hardware setup)
-#define TFT_CS   10
+#define TFT_CS   7
 #define TFT_DC    9
 #define TFT_RST   8
 
@@ -45,10 +45,9 @@ ST7796_t3 tft = ST7796_t3(TFT_CS, TFT_DC, TFT_RST);
 
 #if defined(XPT_TOUCH)
 #include <XPT2046_Touchscreen.h>
-#define CS_PIN  7
-//XPT2046_Touchscreen ts(CS_PIN);
-#define TIRQ_PIN  2
-XPT2046_Touchscreen ts(CS_PIN);  // Param 2 - Touch IRQ Pin - interrupt enabled polling
+#define TOUCH_CS 6
+#define TOUCH_SPI SPI
+XPT2046_Touchscreen ts(TOUCH_CS);  // Param 2 - Touch IRQ Pin - interrupt enabled polling
 
 // XPT2046 typical raw ADC limits (adjust if edges are slightly off)
 #define TS_MINX 200
@@ -59,6 +58,7 @@ XPT2046_Touchscreen ts(CS_PIN);  // Param 2 - Touch IRQ Pin - interrupt enabled 
 #else
 #include <Adafruit_FT6206.h>
 Adafruit_FT6206 ts = Adafruit_FT6206();
+#endif
 #if defined(USE_KEYBOARD)
 #include <ILI9341_t3_Keypad.h>
 // easy way to include fonts but change globally
@@ -67,11 +67,11 @@ Adafruit_FT6206 ts = Adafruit_FT6206();
 // Orientation=1
 //uint16_t ScreenLeft = 3, ScreenRight = 478, ScreenTop = 302, ScreenBottom = 2;
 // Orientation = 3
-int16_t ScreenLeft = 471, ScreenRight = 4, ScreenTop = 9, ScreenBottom = 319;
+//int16_t ScreenLeft = 471, ScreenRight = 4, ScreenTop = 9, ScreenBottom = 319;
+uint16_t ScreenLeft = 3800, ScreenRight = 300, ScreenTop = 3800, ScreenBottom = 300;
 
 Keyboard MyKeyboard(&tft, &ts);
 #endif //use keyboard
-#endif
 
 /*****************************************************
 *  Config weather app / ESP32 Connection
@@ -79,7 +79,8 @@ Keyboard MyKeyboard(&tft, &ts);
 #include "forwardDecs.h"
 #include "weatherApp.h"
 
-#define ESP32SERIAL Serial7  //7 for C3
+//#define ESP32SERIAL Serial7  //7 for C3
+#define ESP32SERIAL Serial1
 #define ESP32SERIAL_BUFFER_SIZE 4 * 1024
 unsigned char esp32SerialBuffer[ESP32SERIAL_BUFFER_SIZE];
 
@@ -125,7 +126,7 @@ void setup() {
   tft.begin();
 #else
   tft.init(320, 480);
-  tft.invertDisplay(true);  //black display
+//  tft.invertDisplay(true);  //black display
 #endif
   tft.setRotation(orientation); // Landscape (480x320)
   tft.setOrigin(0,0);
@@ -135,9 +136,10 @@ void setup() {
   Serial.println("initialization done.");
 
 #if defined(XPT_TOUCH)
-  ts.begin(SPI1);
+  ts.begin(SPI);
 #else
   ts.begin(40, &Wire);
+#endif //use keyboard
 #if defined(USE_KEYBOARD)
   MyKeyboard.init(COLOR_BLACK, COLOR_WHITE, COLOR_BLUE, COLOR_DARKGREY, COLOR_DARKGREY, COLOR_NAVY, COLOR_BLACK, FONT_BUTTON);
   if(orientation == 1) {
@@ -164,7 +166,6 @@ void setup() {
 
   // optional to populate the input box
   //  strcpy(MyKeyboard.data, "TEXT");
-#endif //use keyboard
 #endif
 
   delay(500);
@@ -272,6 +273,8 @@ void loop() {
 #if defined(XPT_TOUCH)
   if (ts.touched()) {
     TS_Point p = ts.getPoint();
+
+    //Serial.printf("Raw: X:%d y:%d\n", p.x, p.y);
 
     if(orientation == 1) {
       // Map inverted ADC values to display pixels

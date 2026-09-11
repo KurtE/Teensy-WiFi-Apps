@@ -3,14 +3,21 @@
 #include <ArduinoJson.h>
 #include "Secrets.h"
 
+#define USING_PROTOSUPLY_C6_STACK_SERIAL1
+
 // -------------------------------------------------------------------
 // Wi-Fi Credentials & Hardware Pins
 // -------------------------------------------------------------------
-const char* ssid     = SSID;
+const char* ssid = SSID;
 const char* password = PASSWORD;
 
+#ifdef USING_PROTOSUPLY_C6_STACK_SERIAL1
+#define RX1 2  // Teensy 4.1 Serial 1 is connected to serial port #1
+#define TX1 1
+#else
 #define RX2 20  // Connect to Teensy 4.1 TX
 #define TX2 21  // Connect to Teensy 4.1 RX
+#endif
 
 WiFiClient client;
 JsonDocument doc;
@@ -18,15 +25,15 @@ JsonDocument doc;
 // -------------------------------------------------------------------
 // API Endpoint Configuration
 // -------------------------------------------------------------------
-const char* server               = "api.open-meteo.com";
+const char* server = "api.open-meteo.com";
 const char* geocoding_api_server = "geocoding-api.open-meteo.com";
-const char* air_quality_server   = "air-quality-api.open-meteo.com";
-const int   port                 = 80;
+const char* air_quality_server = "air-quality-api.open-meteo.com";
+const int port = 80;
 
 // Dynamic Location Parameters (Updated dynamically via Geocoding)
-String weather_city      = "New York";
-float  weather_latitude  = 40.7128;
-float  weather_longitude = -74.0060;
+String weather_city = "New York";
+float weather_latitude = 40.7128;
+float weather_longitude = -74.0060;
 String weather_time_zone = "America/New_York";
 
 // -------------------------------------------------------------------
@@ -54,7 +61,7 @@ bool processIncomingStream(const char* typeLabel);
 // -------------------------------------------------------------------
 // Helper to Construct Exact URL Query Strings
 // -------------------------------------------------------------------
-String buildQueryString(const char *basePath, JsonDocument &params) {
+String buildQueryString(const char* basePath, JsonDocument& params) {
   String query = String(basePath);
   bool first = true;
 
@@ -93,8 +100,8 @@ bool sendMapCityRequest() {
 
   String resource = buildQueryString("/v1/search", params);
   Serial.print("Geocoding Query: ");
-  Serial.println(resource);  
-  
+  Serial.println(resource);
+
   client.print("GET ");
   client.print(resource.c_str());
   client.print(" HTTP/1.0\r\nHost: geocoding-api.open-meteo.com\r\nUser-Agent: ESP32-C3\r\nConnection: close\r\n\r\n");
@@ -186,7 +193,7 @@ bool sendDailyRequest() {
   daily.add("sunset");
   daily.add("relative_humidity_2m_mean");
   daily.add("cloud_cover_mean");
-    
+
   params["timezone"] = weather_time_zone;
   params["wind_speed_unit"] = "mph";
   params["temperature_unit"] = "fahrenheit";
@@ -215,7 +222,7 @@ bool sendAirQualityRequest() {
 
   params["timezone"] = weather_time_zone;
 
-  String resource = buildQueryString("/v1/air-quality", params);  
+  String resource = buildQueryString("/v1/air-quality", params);
 
   client.print("GET ");
   client.print(resource.c_str());
@@ -228,7 +235,7 @@ bool sendAirQualityRequest() {
 // -------------------------------------------------------------------
 bool processIncomingStream(const char* typeLabel) {
   if (!client.connected() && client.available() == 0) {
-    return true; 
+    return true;
   }
 
   // Wait briefly for network buffer to fill
@@ -240,7 +247,7 @@ bool processIncomingStream(const char* typeLabel) {
   // Find end of HTTP headers (\r\n\r\n)
   if (client.find("\r\n\r\n")) {
     String payload = "";
-    payload.reserve(3072); // Pre-allocate heap to avoid fragmentation
+    payload.reserve(3072);  // Pre-allocate heap to avoid fragmentation
 
     uint32_t start = millis();
     while ((client.connected() || client.available()) && (millis() - start < 3000)) {
@@ -254,14 +261,14 @@ bool processIncomingStream(const char* typeLabel) {
       doc.clear();
       DeserializationError err = deserializeJson(doc, payload);
       if (!err && doc["results"][0].containsKey("latitude")) {
-        weather_latitude  = doc["results"][0]["latitude"].as<float>();
+        weather_latitude = doc["results"][0]["latitude"].as<float>();
         weather_longitude = doc["results"][0]["longitude"].as<float>();
-        
+
         if (doc["results"][0].containsKey("timezone")) {
           weather_time_zone = doc["results"][0]["timezone"].as<String>();
         }
 
-        Serial.printf("[ESP32 Geo Update] Lat: %.4f, Lon: %.4f, TZ: %s\n", 
+        Serial.printf("[ESP32 Geo Update] Lat: %.4f, Lon: %.4f, TZ: %s\n",
                       weather_latitude, weather_longitude, weather_time_zone.c_str());
       } else {
         Serial.println("[ESP32 Geo Error] Failed to extract coordinates from payload!");
@@ -286,8 +293,27 @@ bool processIncomingStream(const char* typeLabel) {
 // Arduino Setup
 // -------------------------------------------------------------------
 void setup() {
-  Serial.begin(115200);                        // USB Serial Monitor
-  Serial1.begin(115200, SERIAL_8N1, RX2, TX2); // Hardware UART to Teensy 4.1
+  Serial.begin(115200);  // USB Serial Monitor
+
+// Modify to C6 stack
+// Disconnect unused I/O to avoid possible conflicts
+#ifdef USING_PROTOSUPLY_C6_STACK_SERIAL1
+  gpio_reset_pin(GPIO_NUM_0);
+  // gpio_reset_pin(GPIO_NUM_1);  // Used if connecting by Serial1
+  // gpio_reset_pin(GPIO_NUM_2);  // Used if connecting by Serial1
+  gpio_reset_pin(GPIO_NUM_16);
+  gpio_reset_pin(GPIO_NUM_17);  // Used if connecting by Serial5
+  gpio_reset_pin(GPIO_NUM_18);
+  gpio_reset_pin(GPIO_NUM_19);  // Used if connecting by Serial5
+  gpio_reset_pin(GPIO_NUM_20);
+  gpio_reset_pin(GPIO_NUM_21);
+  gpio_reset_pin(GPIO_NUM_22);
+  gpio_reset_pin(GPIO_NUM_23);
+
+  Serial1.begin(115200, SERIAL_8N1, RX1, TX1);  // Hardware UART to Teensy 4.1
+#else
+  Serial1.begin(115200, SERIAL_8N1, RX2, TX2);  // Hardware UART to Teensy 4.1
+#endif
 
   Serial.println("Connecting to WiFi...");
   WiFi.begin(ssid, password);
@@ -321,26 +347,22 @@ void loop() {
 
     if (commandLine.startsWith("CMD:CITY:")) {
       weather_city = commandLine.substring(9);
-      weather_city.replace(' ', '+'); // URL safety
+      weather_city.replace(' ', '+');  // URL safety
       if (sendMapCityRequest()) {
         currentState = FETCH_CITY;
       } else {
         Serial1.println("ERR:CONN_FAILED");
       }
-    } 
-    else if (commandLine == "CMD:CURRENT") {
+    } else if (commandLine == "CMD:CURRENT") {
       if (sendCurrentRequest()) currentState = FETCH_CURRENT;
       else Serial1.println("ERR:CONN_FAILED");
-    } 
-    else if (commandLine == "CMD:HOURLY") {
+    } else if (commandLine == "CMD:HOURLY") {
       if (sendHourlyRequest()) currentState = FETCH_HOURLY;
       else Serial1.println("ERR:CONN_FAILED");
-    } 
-    else if (commandLine == "CMD:DAILY") {
+    } else if (commandLine == "CMD:DAILY") {
       if (sendDailyRequest()) currentState = FETCH_DAILY;
       else Serial1.println("ERR:CONN_FAILED");
-    } 
-    else if (commandLine == "CMD:AQI") {
+    } else if (commandLine == "CMD:AQI") {
       if (sendAirQualityRequest()) currentState = FETCH_AIR_QUALITY;
       else Serial1.println("ERR:CONN_FAILED");
     }
