@@ -62,8 +62,12 @@ Adafruit_FT6206 ts = Adafruit_FT6206();
 #if defined(USE_KEYBOARD)
 #include <ILI9341_t3_Keypad.h>
 // easy way to include fonts but change globally
-#define FONT_BUTTON Arial_16  // font for keypad buttons
-uint16_t ScreenLeft = 30, ScreenRight = 468, ScreenTop = 302, ScreenBottom = 3;
+#define FONT_BUTTON Arial_12  // font for keypad buttons
+
+// Orientation=1
+//uint16_t ScreenLeft = 3, ScreenRight = 478, ScreenTop = 302, ScreenBottom = 2;
+// Orientation = 3
+int16_t ScreenLeft = 471, ScreenRight = 4, ScreenTop = 9, ScreenBottom = 319;
 
 Keyboard MyKeyboard(&tft, &ts);
 #endif //use keyboard
@@ -75,7 +79,7 @@ Keyboard MyKeyboard(&tft, &ts);
 #include "forwardDecs.h"
 #include "weatherApp.h"
 
-#define ESP32SERIAL Serial7
+#define ESP32SERIAL Serial7  //7 for C3
 #define ESP32SERIAL_BUFFER_SIZE 4 * 1024
 unsigned char esp32SerialBuffer[ESP32SERIAL_BUFFER_SIZE];
 
@@ -90,7 +94,7 @@ uint32_t g_last_cycle_time_ms = 0;
 
 void setup() {
   Serial.begin(115200);
-  ESP32SERIAL.begin(115200);
+  ESP32SERIAL.begin(4000000);
   ESP32SERIAL.addMemoryForRead(esp32SerialBuffer, ESP32SERIAL_BUFFER_SIZE);
 
   // Clear startup garbage from line
@@ -136,7 +140,14 @@ void setup() {
   ts.begin(40, &Wire);
 #if defined(USE_KEYBOARD)
   MyKeyboard.init(COLOR_BLACK, COLOR_WHITE, COLOR_BLUE, COLOR_DARKGREY, COLOR_DARKGREY, COLOR_NAVY, COLOR_BLACK, FONT_BUTTON);
-  MyKeyboard.setTouchLimits( ScreenLeft, ScreenRight, ScreenTop, ScreenBottom);
+  if(orientation == 1) {
+    uint16_t ScreenLeft = 3, ScreenRight = 478, ScreenTop = 302, ScreenBottom = 2;
+    MyKeyboard.setTouchLimits( ScreenLeft, ScreenRight, ScreenTop, ScreenBottom);
+  } else if(orientation == 3) {
+    int16_t ScreenLeft = 471, ScreenRight = 4, ScreenTop = 9, ScreenBottom = 319;
+    MyKeyboard.setTouchLimits( ScreenLeft, ScreenRight, ScreenTop, ScreenBottom);
+  }
+
   // optional methods
   // max input characters is controlled by in the .h file
   // #define MAX_KEYBOARD_CHARS 18
