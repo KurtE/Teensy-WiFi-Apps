@@ -19,6 +19,8 @@ const char* password = PASSWORD;
 #define TX2 21  // Connect to Teensy 4.1 RX
 #endif
 
+#define RESET_PIN D3
+
 WiFiClient client;
 JsonDocument doc;
 
@@ -306,14 +308,25 @@ void setup() {
   gpio_reset_pin(GPIO_NUM_18);
   gpio_reset_pin(GPIO_NUM_19);  // Used if connecting by Serial5
   gpio_reset_pin(GPIO_NUM_20);
-  gpio_reset_pin(GPIO_NUM_21);
+//  gpio_reset_pin(GPIO_NUM_21);
   gpio_reset_pin(GPIO_NUM_22);
   gpio_reset_pin(GPIO_NUM_23);
 
-  Serial1.begin(115200, SERIAL_8N1, RX1, TX1);  // Hardware UART to Teensy 4.1
+  Serial1.begin(4000000, SERIAL_8N1, RX1, TX1);  // Hardware UART to Teensy 4.1
 #else
   Serial1.begin(115200, SERIAL_8N1, RX2, TX2);  // Hardware UART to Teensy 4.1
 #endif
+
+  // Tr to setup a reset pin... Pin 3 here PIN 2 on Arduino.
+#ifdef RESET_PIN  
+  pinMode(RESET_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(RESET_PIN), reset_esp32, FALLING);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(250);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  #endif
 
   Serial.println("Connecting to WiFi...");
   WiFi.begin(ssid, password);
@@ -334,6 +347,21 @@ void setup() {
       }
     }
   }
+}
+
+// -------------------------------------------------------------------
+// Maybe reboot ESP32
+// -------------------------------------------------------------------
+void reset_esp32() {
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(250);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(250);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(250);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(250);
+  esp_restart();
 }
 
 // -------------------------------------------------------------------

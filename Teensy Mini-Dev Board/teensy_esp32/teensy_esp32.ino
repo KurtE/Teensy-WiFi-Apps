@@ -31,6 +31,8 @@ JsonDocument doc;
 #define TFT_DC    9
 #define TFT_RST   8
 
+#define ESP32_RESET_PIN 2
+
 #if defined(ILI9488_DISP)
 ILI9488_t3 tft = ILI9488_t3(&SPI, TFT_CS, TFT_DC, TFT_RST);
 #else
@@ -50,6 +52,7 @@ ST7796_t3 tft = ST7796_t3(TFT_CS, TFT_DC, TFT_RST);
 XPT2046_Touchscreen ts(TOUCH_CS);  // Param 2 - Touch IRQ Pin - interrupt enabled polling
 
 // XPT2046 typical raw ADC limits (adjust if edges are slightly off)
+// from my ST7796 X(223, 3893), Y(340, 3815)
 #define TS_MINX 200
 #define TS_MAXX 3800
 #define TS_MINY 200
@@ -68,7 +71,7 @@ Adafruit_FT6206 ts = Adafruit_FT6206();
 //uint16_t ScreenLeft = 3, ScreenRight = 478, ScreenTop = 302, ScreenBottom = 2;
 // Orientation = 3
 //int16_t ScreenLeft = 471, ScreenRight = 4, ScreenTop = 9, ScreenBottom = 319;
-uint16_t ScreenLeft = 3800, ScreenRight = 300, ScreenTop = 3800, ScreenBottom = 300;
+uint16_t ScreenLeft = 3893, ScreenRight = 223, ScreenTop = 3815, ScreenBottom = 340;
 
 Keyboard MyKeyboard(&tft, &ts);
 #endif //use keyboard
@@ -94,6 +97,10 @@ uint32_t g_last_cycle_time_ms = 0;
 /***********************************************************/
 
 void setup() {
+#ifdef ESP32_RESET_PIN
+  pinMode(ESP32_RESET_PIN, INPUT_PULLUP);
+#endif
+
   Serial.begin(115200);
   ESP32SERIAL.begin(4000000);
   ESP32SERIAL.addMemoryForRead(esp32SerialBuffer, ESP32SERIAL_BUFFER_SIZE);
@@ -104,7 +111,20 @@ void setup() {
   }
 
   // Handshake loop
+  uint8_t ping_count = 0;
   while (!esp32Attached) {
+    #ifdef ESP32_RESET_PIN
+    ping_count++;
+    if (ping_count == 10) {
+      Serial.println("Reset ESP32");
+      pinMode(ESP32_RESET_PIN, OUTPUT);
+      digitalWrite(ESP32_RESET_PIN, LOW);
+      delay(5);
+      pinMode(ESP32_RESET_PIN, INPUT_PULLUP);
+      delay(5000);
+      ping_count = 0;
+    }
+    #endif
     Serial.println("Ping ESP32-C3...");
     ESP32SERIAL.print("?");
     
@@ -143,7 +163,8 @@ void setup() {
 #if defined(USE_KEYBOARD)
   MyKeyboard.init(COLOR_BLACK, COLOR_WHITE, COLOR_BLUE, COLOR_DARKGREY, COLOR_DARKGREY, COLOR_NAVY, COLOR_BLACK, FONT_BUTTON);
   if(orientation == 1) {
-    uint16_t ScreenLeft = 3, ScreenRight = 478, ScreenTop = 302, ScreenBottom = 2;
+    uint16_t ScreenLeft = 3800, ScreenRight = 250, ScreenTop = 3800, ScreenBottom = 180;
+    //uint16_t ScreenLeft = 3, ScreenRight = 478, ScreenTop = 302, ScreenBottom = 2;
     MyKeyboard.setTouchLimits( ScreenLeft, ScreenRight, ScreenTop, ScreenBottom);
   } else if(orientation == 3) {
     int16_t ScreenLeft = 471, ScreenRight = 4, ScreenTop = 9, ScreenBottom = 319;
