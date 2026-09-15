@@ -4,7 +4,7 @@
 //#define ILI9488_DISP // else ST7796
 #define XPT_TOUCH  //else FT6236
 #define USE_KEYBOARD
-#define printForecast
+//#define printForecast
 #define orientation 1  // or 1 (landscape)
 
 String DEFAULT_CITY = "Disneyland"; // Default startup city
@@ -74,7 +74,8 @@ Adafruit_FT6206 ts = Adafruit_FT6206();
 uint16_t ScreenLeft = 3893, ScreenRight = 223, ScreenTop = 3815, ScreenBottom = 340;
 
 Keyboard MyKeyboard(&tft, &ts);
-#endif //use keyboard
+//[[maybe_unused]] uint16_t ScreenLeft = 30, ScreenRight = 468, ScreenTop = 302, ScreenBottom = 3;
+#endif
 
 /*****************************************************
 *  Config weather app / ESP32 Connection
@@ -82,8 +83,7 @@ Keyboard MyKeyboard(&tft, &ts);
 #include "forwardDecs.h"
 #include "weatherApp.h"
 
-//#define ESP32SERIAL Serial7  //7 for C3
-#define ESP32SERIAL Serial1
+#define ESP32SERIAL Serial5  //7 for C3, 5 for C5/C6
 #define ESP32SERIAL_BUFFER_SIZE 4 * 1024
 unsigned char esp32SerialBuffer[ESP32SERIAL_BUFFER_SIZE];
 
@@ -121,7 +121,7 @@ void setup() {
       digitalWrite(ESP32_RESET_PIN, LOW);
       delay(5);
       pinMode(ESP32_RESET_PIN, INPUT_PULLUP);
-      delay(5000);
+      delay(3000);
       ping_count = 0;
     }
     #endif
@@ -156,21 +156,28 @@ void setup() {
   Serial.println("initialization done.");
 
 #if defined(XPT_TOUCH)
-  ts.begin(SPI);
+  ts.begin(TOUCH_SPI);
+  if (orientation == 3) {
+    ScreenLeft = 267; ScreenRight = 3869; 
+    ScreenTop = 167; ScreenBottom = 3863;
+  } else if (orientation == 1) {
+    ScreenLeft = 3869; ScreenRight = 267; 
+    ScreenTop = 3863; ScreenBottom = 167;
+  }
 #else
   ts.begin(40, &Wire);
-#endif //use keyboard
+  if(orientation == 1) {
+    ScreenLeft = 3; ScreenRight = 478;
+    ScreenTop = 302; ScreenBottom = 2;
+  } else if(orientation == 3) {
+    ScreenLeft = 471;  creenRight = 4; 
+    ScreenTop = 9; ScreenBottom = 319;
+  }
+#endif
+
 #if defined(USE_KEYBOARD)
   MyKeyboard.init(COLOR_BLACK, COLOR_WHITE, COLOR_BLUE, COLOR_DARKGREY, COLOR_DARKGREY, COLOR_NAVY, COLOR_BLACK, FONT_BUTTON);
-  if(orientation == 1) {
-    uint16_t ScreenLeft = 3800, ScreenRight = 250, ScreenTop = 3800, ScreenBottom = 180;
-    //uint16_t ScreenLeft = 3, ScreenRight = 478, ScreenTop = 302, ScreenBottom = 2;
-    MyKeyboard.setTouchLimits( ScreenLeft, ScreenRight, ScreenTop, ScreenBottom);
-  } else if(orientation == 3) {
-    int16_t ScreenLeft = 471, ScreenRight = 4, ScreenTop = 9, ScreenBottom = 319;
-    MyKeyboard.setTouchLimits( ScreenLeft, ScreenRight, ScreenTop, ScreenBottom);
-  }
-
+  MyKeyboard.setTouchLimits( ScreenLeft, ScreenRight, ScreenTop, ScreenBottom);
   // optional methods
   // max input characters is controlled by in the .h file
   // #define MAX_KEYBOARD_CHARS 18
@@ -178,16 +185,13 @@ void setup() {
   MyKeyboard.setDisplayColor(COLOR_WHITE, COLOR_BLUE);
   // want rounded corners?
   // MyKeyboard.setCornerRadius(3);
-
   // Set initial instructions
   // MyKeyboard.setInitialText("IP 111.222.333.444");
-
   // MyKeyboard.hideInput(); // for hidden password input
   //MyKeyboard.setInitialText("New City");
-
   // optional to populate the input box
   //  strcpy(MyKeyboard.data, "TEXT");
-#endif
+#endif //use keyboard
 
   delay(500);
 
@@ -295,8 +299,6 @@ void loop() {
   if (ts.touched()) {
     TS_Point p = ts.getPoint();
 
-    //Serial.printf("Raw: X:%d y:%d\n", p.x, p.y);
-
     if(orientation == 1) {
       // Map inverted ADC values to display pixels
       touchX = map(p.x, 3800, 300, 0, 480);
@@ -309,11 +311,11 @@ void loop() {
       TS_Point p = ts.getPoint();
 
       // Map inverted ADC values to display pixels
-      touchX = map(p.x, 3800, 300, 0, 480);
-      touchY = map(p.y, 3800, 300, 0, 320);
+      touchX = map(p.x, 3800, 300, 0, 479);
+      touchY = map(p.y, 3800, 300, 0, 319);
 
-      touchX = constrain(touchX, 0, 480);
-      touchY = constrain(touchY, 0, 320);
+      touchX = constrain(touchX, 0, 479);
+      touchY = constrain(touchY, 0, 319);
     }
   #else //end XPT Touch
     if (ts.touched())
@@ -423,9 +425,9 @@ bool isKeyboardClicked(int touchX, int touchY) {
   //Serial.printf("%d, %d\n", touchX, touchY);
 
   int btnX = 400;
-  int btnY = 0;
-  int btnW = 44;
-  int btnH = 14;
+  int btnY = 5;
+  int btnW = 50;
+  int btnH = 24;
 
   return (touchX >= btnX && touchX <= (btnX + btnW) &&
           touchY >= btnY && touchY <= (btnY + btnH));

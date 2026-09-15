@@ -2,24 +2,27 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "Secrets.h"
+#include "driver/gpio.h"
 
-#define USING_PROTOSUPLY_C6_STACK_SERIAL1
+#define RESET_PIN D3
+
+#if defined(ARDUINO_XIAO_ESP32C3)
+#define RX2 20  // Connect to Teensy 4.1 TX
+#define TX2 21  // Connect to Teensy 4.1 RX
+#elif defined(ARDUINO_XIAO_ESP32C5)
+#define serialPort Serial1
+#define RX2 12  //Serial5 TX on T4.1
+#define TX2 8   // Serial5 RX on T4.1
+#elif defined(ARDUINO_XIAO_ESP32C6)
+#define RX2 17 //Serial5 TX on T4.1
+#define TX2 19  // Serial5 RX on T4.1
+#endif
 
 // -------------------------------------------------------------------
 // Wi-Fi Credentials & Hardware Pins
 // -------------------------------------------------------------------
 const char* ssid = SSID;
 const char* password = PASSWORD;
-
-#ifdef USING_PROTOSUPLY_C6_STACK_SERIAL1
-#define RX1 2  // Teensy 4.1 Serial 1 is connected to serial port #1
-#define TX1 1
-#else
-#define RX2 20  // Connect to Teensy 4.1 TX
-#define TX2 21  // Connect to Teensy 4.1 RX
-#endif
-
-#define RESET_PIN D3
 
 WiFiClient client;
 JsonDocument doc;
@@ -63,7 +66,7 @@ bool processIncomingStream(const char* typeLabel);
 // -------------------------------------------------------------------
 // Helper to Construct Exact URL Query Strings
 // -------------------------------------------------------------------
-String buildQueryString(const char* basePath, JsonDocument& params) {
+String buildQueryString(const char *basePath, JsonDocument &params) {
   String query = String(basePath);
   bool first = true;
 
@@ -277,7 +280,7 @@ bool processIncomingStream(const char* typeLabel) {
       }
     }
 
-    // Send formatted raw response to Teensy 4.1 over Serial1
+    // Send formatted raw response to Teensy 4.1 over serialPort
     Serial1.print("JSON:");
     Serial1.print(typeLabel);
     Serial1.print(":");
@@ -295,27 +298,33 @@ bool processIncomingStream(const char* typeLabel) {
 // Arduino Setup
 // -------------------------------------------------------------------
 void setup() {
-  Serial.begin(115200);  // USB Serial Monitor
-
-// Modify to C6 stack
+#if defined(ARDUINO_XIAO_ESP32C5)
 // Disconnect unused I/O to avoid possible conflicts
-#ifdef USING_PROTOSUPLY_C6_STACK_SERIAL1
-  gpio_reset_pin(GPIO_NUM_0);
-  // gpio_reset_pin(GPIO_NUM_1);  // Used if connecting by Serial1
-  // gpio_reset_pin(GPIO_NUM_2);  // Used if connecting by Serial1
-  gpio_reset_pin(GPIO_NUM_16);
-  gpio_reset_pin(GPIO_NUM_17);  // Used if connecting by Serial5
-  gpio_reset_pin(GPIO_NUM_18);
-  gpio_reset_pin(GPIO_NUM_19);  // Used if connecting by Serial5
-  gpio_reset_pin(GPIO_NUM_20);
-//  gpio_reset_pin(GPIO_NUM_21);
-  gpio_reset_pin(GPIO_NUM_22);
-  gpio_reset_pin(GPIO_NUM_23);
-
-  Serial1.begin(4000000, SERIAL_8N1, RX1, TX1);  // Hardware UART to Teensy 4.1
-#else
-  Serial1.begin(115200, SERIAL_8N1, RX2, TX2);  // Hardware UART to Teensy 4.1
+  gpio_reset_pin((gpio_num_t)D0);
+  gpio_reset_pin((gpio_num_t)D1);
+  gpio_reset_pin((gpio_num_t)D2);
+//  gpio_reset_pin((gpio_num_t)D3);
+  gpio_reset_pin((gpio_num_t)D4);
+  gpio_reset_pin((gpio_num_t)D5);
+  gpio_reset_pin((gpio_num_t)D6);
+  //gpio_reset_pin((gpio_num_t)D7);  //Serial5
+  //gpio_reset_pin((gpio_num_t)D8);  //Serial5
+  gpio_reset_pin((gpio_num_t)D9);
+  gpio_reset_pin((gpio_num_t)D10);
+#elif defined(ARDUINO_XIAO_ESP32C6)
+  gpio_reset_pin((gpio_num_t)D0);
+  gpio_reset_pin((gpio_num_t)D1);
+  gpio_reset_pin((gpio_num_t)D2);
+//  gpio_reset_pin((gpio_num_t)D3);
+  gpio_reset_pin((gpio_num_t)D4);
+  gpio_reset_pin((gpio_num_t)D5);
+  gpio_reset_pin((gpio_num_t)D6);
+  //gpio_reset_pin((gpio_num_t)D7);  //Serial5
+  //gpio_reset_pin((gpio_num_t)D8);  //Serial5
 #endif
+
+  Serial.begin(115200);                        // USB Serial Monitor
+  Serial1.begin(4000000, SERIAL_8N1, RX2, TX2); // Hardware UART to Teensy 4.1
 
   // Tr to setup a reset pin... Pin 3 here PIN 2 on Arduino.
 #ifdef RESET_PIN  
@@ -381,16 +390,20 @@ void loop() {
       } else {
         Serial1.println("ERR:CONN_FAILED");
       }
-    } else if (commandLine == "CMD:CURRENT") {
+    } 
+    else if (commandLine == "CMD:CURRENT") {
       if (sendCurrentRequest()) currentState = FETCH_CURRENT;
       else Serial1.println("ERR:CONN_FAILED");
-    } else if (commandLine == "CMD:HOURLY") {
+    } 
+    else if (commandLine == "CMD:HOURLY") {
       if (sendHourlyRequest()) currentState = FETCH_HOURLY;
       else Serial1.println("ERR:CONN_FAILED");
-    } else if (commandLine == "CMD:DAILY") {
+    } 
+    else if (commandLine == "CMD:DAILY") {
       if (sendDailyRequest()) currentState = FETCH_DAILY;
       else Serial1.println("ERR:CONN_FAILED");
-    } else if (commandLine == "CMD:AQI") {
+    } 
+    else if (commandLine == "CMD:AQI") {
       if (sendAirQualityRequest()) currentState = FETCH_AIR_QUALITY;
       else Serial1.println("ERR:CONN_FAILED");
     }

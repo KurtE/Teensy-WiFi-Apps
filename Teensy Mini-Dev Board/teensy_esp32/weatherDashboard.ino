@@ -319,11 +319,11 @@ void showKeyboard() {
   // -------------------------------------------------------------
   // 4. BOTTOM ACTION BAR (BACK BUTTON)
   // -------------------------------------------------------------
-  tft.drawRoundRect(20, 255, 120, 45, 8, COLOR_WHITE);
-  tft.setFont(Arial_12_Bold);
-  tft.setTextColor(COLOR_WHITE);
-  tft.setCursor(55, 270);
-  tft.print("BACK");
+  //tft.drawRoundRect(20, 255, 120, 45, 8, COLOR_WHITE);
+  //tft.setFont(Arial_12_Bold);
+  //tft.setTextColor(COLOR_WHITE);
+  //tft.setCursor(55, 270);
+  //tft.print("BACK");
 
   MyKeyboard.getInput();
   Serial.print("New City is: ");
