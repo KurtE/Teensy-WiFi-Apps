@@ -1,8 +1,3 @@
-String weather_city = "";
-String weather_time_zone = "";
-double weather_latitude = 0;
-double weather_longitude = 0;
-
 struct WeatherData {
   // Header / Current
   String location = "Loading...";
@@ -36,15 +31,45 @@ struct WeatherData {
   float rainSum[7];     
   float snowSum[7];     
   float windMax[7];     
-  float gustsMax[7];   
+  float gustsMax[7];    
   float cloudCover[7];
-  
+
   // Expanded Daily Array Fields
   String dailySunrise[7];
   String dailySunset[7];
   int dailyHumidity[7];
 } weather;
 
+// Header detection state machine across loop iterations
+uint8_t headerState = 0;
+bool headerComplete = false;
+
+// Helper to construct exact URL query
+String buildQueryString(const char *basePath, JsonDocument &params) {
+  String query = String(basePath);
+  bool first = true;
+
+  JsonObject obj = params.as<JsonObject>();
+  for (JsonPair kv : obj) {
+    query += first ? '?' : '&';
+    first = false;
+
+    query += kv.key().c_str();
+    query += '=';
+
+    if (kv.value().is<JsonArray>()) {
+      bool firstElement = true;
+      for (JsonVariant val : kv.value().as<JsonArray>()) {
+        if (!firstElement) query += ',';
+        query += val.as<String>();
+        firstElement = false;
+      }
+    } else {
+      query += kv.value().as<String>();
+    }
+  }
+  return query;
+}
 
 // Convert Open-Meteo weather codes to human-readable strings
 const char* getWeatherDescription(int code) {
@@ -72,65 +97,175 @@ const char* getWeatherDescription(int code) {
   }
 }
 
-// refine open-meteo wmo code 3 grouping of 1,2,3 into single code
-int refineWMOCode(int originalCode, float cloudCoverMean, float popMax) {
-  // Only refine dry non-precipitating codes (0 to 3)
-  if (originalCode > 3) {
-    return originalCode; // Keep rain, snow, fog, thunderstorm codes intact
-  }
+// -------------------------------------------------------------------
+// Request Builders
+// -------------------------------------------------------------------
+bool sendMapCityRequest() {
+  client.stop(); // Clear existing socket
+  if (!client.connect(geocoding_api_server, port)) return false;
 
-  // Override logic based on mean daily cloud cover percentage
-  if (cloudCoverMean < 10.0) {
-    return 0; // Clear sky
-  } 
-  else if (cloudCoverMean >= 10.0 && cloudCoverMean < 35.0) {
-    return 1; // Mainly clear
-  } 
-  else if (cloudCoverMean >= 35.0 && cloudCoverMean < 70.0) {
-    return 2; // Partly cloudy
-  } 
-  else {
-    // If cloud cover is high, but PoP is very low, ensure it stays as Overcast (3)
-    // rather than escalating to a rain/drizzle code.
-    return 3; // Overcast
-  }
+  JsonDocument params;
+  params["name"] = weather_city;
+  params["count"] = 1;
+
+  String resource = buildQueryString("/v1/search", params);
+  Serial.print("Name Query:");
+  Serial.println(resource);
+  
+  client.print("GET ");
+  client.print(resource.c_str());
+  client.print(" HTTP/1.0\r\nHost: geocoding-api.open-meteo.com\r\nConnection: close\r\n\r\n");
+  headerState = 0;
+  headerComplete = false;
+  return true;
 }
 
-String getDayOfWeek(String dateStr) {
-  // Expected input format: "YYYY-MM-DD" or "MM-DD"
-  if (dateStr.length() < 10) return "Day";
+bool sendCurrentRequest() {
+  client.stop(); // Clear existing socket
+  if (!client.connect(server, port)) return false;
 
-  int year  = dateStr.substring(0, 4).toInt();
-  int month = dateStr.substring(5, 7).toInt();
-  int day   = dateStr.substring(8, 10).toInt();
+  JsonDocument params;
+  params["latitude"] = weather_latitude;
+  params["longitude"] = weather_longitude;
 
-  // Zeller's Congruence algorithm for day-of-week calculation
-  if (month < 3) {
-    month += 12;
-    year--;
-  }
+  JsonArray current = params["current"].to<JsonArray>();
+  current.add("temperature_2m");
+  current.add("wind_speed_10m");
+  current.add("wind_direction_10m");
+  current.add("weather_code");
+  current.add("surface_pressure");
+  current.add("rain");
+  current.add("snowfall");
+	current.add("precipitation");
+
+  params["timezone"] = weather_time_zone;
+  params["wind_speed_unit"] = "mph";
+  params["temperature_unit"] = "fahrenheit";
+  params["precipitation_unit"] = "inch";
+
+  String resource = buildQueryString("/v1/forecast", params);
+
+  client.print("GET ");
+  client.print(resource.c_str());
+  client.print(" HTTP/1.0\r\nHost: api.open-meteo.com\r\nConnection: close\r\n\r\n");
   
-  int k = year % 100;
-  int j = year / 100;
-  int h = (day + 13 * (month + 1) / 5 + k + k / 4 + j / 4 + 5 * j) % 7;
+  headerState = 0;
+  headerComplete = false;
+  return true;
+}
 
-  // Zeller's result mapping (0 = Saturday, 1 = Sunday, etc.)
-  const char* dayNames[] = {"Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"};
-  return String(dayNames[h]);
+bool sendHourlyRequest() {
+  client.stop(); // Clear existing socket
+  if (!client.connect(server, port)) return false;
+
+  JsonDocument params;
+  params["latitude"] = weather_latitude;
+  params["longitude"] = weather_longitude;
+
+  JsonArray hourly = params["hourly"].to<JsonArray>();
+  hourly.add("temperature_2m");
+  hourly.add("precipitation_probability");
+  hourly.add("precipitation");
+  hourly.add("rain");
+  hourly.add("snowfall");
+  hourly.add("pressure_msl");
+  hourly.add("wind_speed_10m");
+
+  params["timezone"] = weather_time_zone;
+  params["forecast_days"] = 1;
+  params["wind_speed_unit"] = "mph";
+  params["temperature_unit"] = "fahrenheit";
+  params["precipitation_unit"] = "inch";
+
+  String resource = buildQueryString("/v1/forecast", params);
+
+  client.print("GET ");
+  client.print(resource.c_str());
+  client.print(" HTTP/1.0\r\nHost: api.open-meteo.com\r\nConnection: close\r\n\r\n");
+
+  headerState = 0;
+  headerComplete = false;
+
+  return true;
+}
+
+bool sendDailyRequest() {
+  client.stop(); // Clear existing socket
+  if (!client.connect(server, port)) return false;
+
+  JsonDocument params;
+  params["latitude"] = weather_latitude;
+  params["longitude"] = weather_longitude;
+
+  JsonArray daily = params["daily"].to<JsonArray>();
+  daily.add("temperature_2m_max");
+  daily.add("temperature_2m_min");
+  daily.add("snowfall_sum");
+  daily.add("precipitation_probability_max");
+  daily.add("weather_code");
+  daily.add("wind_speed_10m_max");
+  daily.add("wind_direction_10m_dominant");
+  daily.add("rain_sum");
+  //daily.add("precipitation_sum");
+  daily.add("sunrise");
+	daily.add("sunset");
+	daily.add("relative_humidity_2m_mean");
+  daily.add("cloud_cover_mean");
+	
+  params["timezone"] = weather_time_zone;
+  params["wind_speed_unit"] = "mph";
+  params["temperature_unit"] = "fahrenheit";
+  params["precipitation_unit"] = "inch";
+
+  String resource = buildQueryString("/v1/forecast", params);
+
+  client.print("GET ");
+  client.print(resource.c_str());
+  client.print(" HTTP/1.0\r\nHost: api.open-meteo.com\r\nConnection: close\r\n\r\n");
+
+  headerState = 0;
+  headerComplete = false;
+  return true;
+}
+
+bool sendAirQualityRequest() {
+  //https://air-quality-api.open-meteo.com/v1/air-quality?latitude=48.5126&longitude=-122.61267&current=us_aqi,pm2_5,pm10&timezone=America%2FLos_Angeles&forecast_days=1
+  client.stop(); // Clear existing socket
+  if (!client.connect(air_quality_server, port)) return false;
+
+  JsonDocument params;
+  params["latitude"] = weather_latitude;
+  params["longitude"] = weather_longitude;
+
+  JsonArray current = params["current"].to<JsonArray>();
+  current.add("us_aqi");
+  current.add("pm2_5");
+  current.add("pm10");
+
+  params["timezone"] = weather_time_zone;
+
+  String resource = buildQueryString("/v1/air-quality", params);  
+
+  client.print("GET ");
+  client.print(resource.c_str());
+  client.print(" HTTP/1.0\r\nHost: air-quality-api.open-meteo.com\r\nConnection: close\r\n\r\n");
+  headerState = 0;
+  headerComplete = false;
+  return true;
 }
 
 // -------------------------------------------------------------------
 // Render Output Functions
 // -------------------------------------------------------------------
 void printMapCityData() {
-  Serial.println("\n====================== Map City ======================");
-
   // Lets remember this data for retrieving the weather data.
   const char *name = doc["results"][0]["name"];
   weather_latitude = doc["results"][0]["latitude"];
   weather_longitude = doc["results"][0]["longitude"];
   weather_time_zone = String(doc["results"][0]["timezone"]);
+  
 #if defined(printForecast)
+  Serial.println("\n====================== Map City ======================");
   Serial.printf("Name:                %s\n", name);
   Serial.printf("latitude:            %f\n", weather_latitude);
   Serial.printf("longitude:           %f\n", weather_longitude);
@@ -153,6 +288,7 @@ void printCurrentData() {
   Serial.printf("Rain:                %.2f in\n", doc["current"]["rain_sum"].as<float>());
   Serial.printf("Snowfall:            %.2f in\n", doc["current"]["snowfall_sum"].as<float>());
 #endif
+
   weather.currentTime = String(doc["current"]["time"].as<const char*>());
   weather.currentWmoCode = doc["current"]["weather_code"].as<int>();
   weather.conditionText = String(getWeatherDescription(weather.currentWmoCode));
@@ -201,21 +337,21 @@ void printHourlyData() {
 }
 
 void printDailyData() {
-  JsonArray dailyTime       = doc["daily"]["time"].as<JsonArray>();
-  JsonArray dailyMax        = doc["daily"]["temperature_2m_max"].as<JsonArray>();
-  JsonArray dailyMin        = doc["daily"]["temperature_2m_min"].as<JsonArray>();
-  JsonArray dailyPop        = doc["daily"]["precipitation_probability_max"].as<JsonArray>();
-  JsonArray dailyPrecip     = doc["daily"]["precipitation_sum"].as<JsonArray>();
-  JsonArray dailyRain       = doc["daily"]["rain_sum"].as<JsonArray>();
-  JsonArray dailySnow       = doc["daily"]["snowfall_sum"].as<JsonArray>();
-  JsonArray dailyWind       = doc["daily"]["wind_speed_10m_max"].as<JsonArray>();
-  JsonArray dailyGusts      = doc["daily"]["wind_gusts_10m_max"].as<JsonArray>();
-  JsonArray dailyCode       = doc["daily"]["weather_code"].as<JsonArray>();
-  JsonArray sunrise         = doc["daily"]["sunrise"].as<JsonArray>();
-  JsonArray sunset          = doc["daily"]["sunset"].as<JsonArray>();
-  JsonArray humidity        = doc["daily"]["relative_humidity_2m_mean"].as<JsonArray>();
+  JsonArray dailyTime   = doc["daily"]["time"].as<JsonArray>();
+  JsonArray dailyMax    = doc["daily"]["temperature_2m_max"].as<JsonArray>();
+  JsonArray dailyMin    = doc["daily"]["temperature_2m_min"].as<JsonArray>();
+  JsonArray dailyPop    = doc["daily"]["precipitation_probability_max"].as<JsonArray>();
+  JsonArray dailyPrecip = doc["daily"]["precipitation_sum"].as<JsonArray>();
+  JsonArray dailyRain   = doc["daily"]["rain_sum"].as<JsonArray>();
+  JsonArray dailySnow   = doc["daily"]["snowfall_sum"].as<JsonArray>();
+  JsonArray dailyWind   = doc["daily"]["wind_speed_10m_max"].as<JsonArray>();
+  JsonArray dailyGusts  = doc["daily"]["wind_gusts_10m_max"].as<JsonArray>();
+  JsonArray dailyCode   = doc["daily"]["weather_code"].as<JsonArray>();
+  JsonArray sunrise     = doc["daily"]["sunrise"].as<JsonArray>();
+  JsonArray sunset      = doc["daily"]["sunset"].as<JsonArray>();
+  JsonArray humidity    = doc["daily"]["relative_humidity_2m_mean"].as<JsonArray>();
   JsonArray dailyCloudCover = doc["daily"]["cloud_cover_mean"].as<JsonArray>();
-  
+
   size_t count = min((size_t)7, dailyTime.size());
 
 #if defined(printForecast)
@@ -269,9 +405,9 @@ void printDailyData() {
     //weather.days[i]      = "Day " + String(i + 1);
     weather.tempsHigh[i] = dailyMax[i].as<float>();
     weather.tempsLow[i]  = dailyMin[i].as<float>();
-    weather.wmoCodes[i]  = dailyCode[i].as<uint8_t>();
     weather.pop[i]       = dailyPop[i].as<int>();
     weather.cloudCover[i]= dailyCloudCover[i].as<float>();
+    weather.wmoCodes[i]  = dailyCode[i].as<float>();
     //try to refine wmo code 3
     weather.wmoCodes[i] = refineWMOCode(weather.wmoCodes[i], weather.cloudCover[i], (float) dailyPop[i].as<int>());
 
@@ -296,7 +432,7 @@ void printDailyData() {
     weather.humidity = weather.dailyHumidity[0];
   }
 
-   tft.fillScreen(COLOR_BG);
+  tft.fillScreen(COLOR_BG);
 }
 
 void printAirQualityData() {
@@ -308,23 +444,94 @@ void printAirQualityData() {
   Serial.printf("PM 2.5:      %.1f hPa\n", doc["current"]["pm2_5"].as<float>());
   Serial.printf("PM 10:       %.1f hPa\n", doc["current"]["pm10"].as<float>());
 #endif
+
   weather.AQI = doc["current"]["us_aqi"].as<int>();
   weather.PM25 = doc["current"]["pm2_5"].as<float>();
   weather.PM10 = doc["current"]["pm10"].as<float>();
 }
 
+
 // Stream reader that strips HTTP headers and parses incoming payload
-bool processIncomingStream(void (*outputFunc)(), String response) {
+bool processIncomingStream(void (*outputFunc)()) {
+  while (client.available() > 0 && !headerComplete) {
+    char c = client.read();
+    switch (headerState) {
+      case 0: headerState = (c == '\r') ? 1 : 0; break;
+      case 1: headerState = (c == '\n') ? 2 : 0; break;
+      case 2: headerState = (c == '\r') ? 3 : 0; break;
+      case 3: headerState = (c == '\n') ? 4 : 0; break;
+    }
+    if (headerState == 4) {
+      headerComplete = true;
+      
+      // Wait up to 1000ms for incoming payload bytes to buffer before deserializing
+      uint32_t start = millis();
+      while (client.available() == 0 && (millis() - start < 1000)) {
+        delay(10);
+      }
 
-	doc.clear();
-	DeserializationError error = deserializeJson(doc, response);
-	if (!error) {
-		outputFunc();
-	} else {
-		Serial.printf("JSON Parsing failed: %s\n", error.c_str());
-		serializeJsonPretty(doc, Serial);
-		return false;
-	}
+      doc.clear();
+      DeserializationError error = deserializeJson(doc, client);
+      if (!error) {
+        outputFunc();
+      } else {
+        Serial.printf("JSON Parsing failed: %s\n", error.c_str());
+        serializeJsonPretty(doc, Serial); 
+      }
+    }
+  }
 
-  return true;
+  if (!client.connected() && client.available() == 0) {
+    client.stop();
+    return true; // Stream fully processed
+  }
+  return false;
+}
+
+
+// refine open-meteo wmo code 3 grouping of 1,2,3 into single code
+int refineWMOCode(int originalCode, float cloudCoverMean, float popMax) {
+  // Only refine dry non-precipitating codes (0 to 3)
+  if (originalCode > 3) {
+    return originalCode; // Keep rain, snow, fog, thunderstorm codes intact
+  }
+
+  // Override logic based on mean daily cloud cover percentage
+  if (cloudCoverMean < 10.0) {
+    return 0; // Clear sky
+  } 
+  else if (cloudCoverMean >= 10.0 && cloudCoverMean < 35.0) {
+    return 1; // Mainly clear
+  } 
+  else if (cloudCoverMean >= 35.0 && cloudCoverMean < 70.0) {
+    return 2; // Partly cloudy
+  } 
+  else {
+    // If cloud cover is high, but PoP is very low, ensure it stays as Overcast (3)
+    // rather than escalating to a rain/drizzle code.
+    return 3; // Overcast
+  }
+}
+
+String getDayOfWeek(String dateStr) {
+  // Expected input format: "YYYY-MM-DD" or "MM-DD"
+  if (dateStr.length() < 10) return "Day";
+
+  int year  = dateStr.substring(0, 4).toInt();
+  int month = dateStr.substring(5, 7).toInt();
+  int day   = dateStr.substring(8, 10).toInt();
+
+  // Zeller's Congruence algorithm for day-of-week calculation
+  if (month < 3) {
+    month += 12;
+    year--;
+  }
+  
+  int k = year % 100;
+  int j = year / 100;
+  int h = (day + 13 * (month + 1) / 5 + k + k / 4 + j / 4 + 5 * j) % 7;
+
+  // Zeller's result mapping (0 = Saturday, 1 = Sunday, etc.)
+  const char* dayNames[] = {"Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"};
+  return String(dayNames[h]);
 }

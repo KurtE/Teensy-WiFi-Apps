@@ -97,7 +97,7 @@ const char* getWeatherIconFilename(uint8_t wmo) {
       return (const char*)image_thunderstorm_with_hail;
     case 99:
       return (const char*)image_thunderstorm_with_hail;      // Thunderstorm with hail
-    
+
     case 100:
       return (const char*)image_keypad;
 
@@ -141,6 +141,10 @@ void drawWeatherDashboard() {
   drawPNG(getWeatherIconFilename(weather.currentWmoCode), 175, 85);
 
   //Air Quality Index
+  //tft.setCursor(45, 150);
+  //tft.print("AQI: ");
+  //tft.setCursor(90, 150);
+  //tft.print(weather.AQI);
   drawAQIMetric(45, 150, weather.AQI);
 
   // Current Temperature Data
@@ -313,8 +317,10 @@ void showDayDetailScreen(int dayIndex) {
 }
 
 #if defined(USE_KEYBOARD)
-void showKeyboard() {
+bool showKeyboard() {
   currentScreen = SCREEN_KEYBOARD;
+  Serial.println(weather_city);
+  strcpy(MyKeyboard.data, "");
   tft.fillScreen(COLOR_BG);
   // -------------------------------------------------------------
   // 4. BOTTOM ACTION BAR (BACK BUTTON)
@@ -329,17 +335,29 @@ void showKeyboard() {
   Serial.print("New City is: ");
   Serial.println(MyKeyboard.data);
 
-
   //check if blank
-  if(strncmp(MyKeyboard.data,"", 2)) 
-      weather_city = weather_city;
+  String test = MyKeyboard.data;
+  if(test.length() < 2) {
+    currentScreen = SCREEN_MAIN;
+    weather_city = weather_city;
+    Serial.println(weather_city);
+    appState = FETCH_MAP_CITY_TO_LOCATION; 
+    return true;
+  }
+
   //only update on new city
   if(weather_city != MyKeyboard.data) {
+    currentScreen = SCREEN_MAIN;
     weather_city = MyKeyboard.data;
-    // Send execution commands across UART
-    ESP32SERIAL.print("CMD:CITY:");
-    ESP32SERIAL.println(weather_city);
+    weather_city.trim();
+    weather_city.replace(' ', '+');
+    //Serial.print("New City: ");
+    //Serial.println(weather_city);
+    appState = FETCH_MAP_CITY_TO_LOCATION; 
+    return true;
   }
+
+  return false;
 }
 #endif //use keyboard
 

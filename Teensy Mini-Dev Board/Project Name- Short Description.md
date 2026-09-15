@@ -35,12 +35,32 @@ None as the Mini Platform is self contained.
 /**********************************************
 *  Setup display and touch
 ***********************************************/
+/**********************************************
+*  Setup display and touch
+***********************************************/
+// Configre ESP32 stack
+//#define MINIDEVBRD    //C3 on minidev board
 //#define ILI9488_DISP // esle ST7796
-//#define XPT_TOUCH  //else FT6236
-#define USE_KEYBOARD  //comment out if do now want on screen keyboard
-//#define printForecast   //uncomment if you want to print all the forecast data to the serial monitor
+#define XPT_TOUCH  //else FT6236
+//#define INVERT_ST7796_DISPLAY
+#define USE_KEYBOARD
+//#define printForecast
 #define orientation 3  // or 1 (landscape)
 
-String DEFAULT_CITY = "Disneyland"; // Default startup city
+// Configure Display CS, DC and RST pins
+// Pin assignments (adjust to your hardware/display setup)
+#define TFT_CS   10
+#define TFT_DC    9
+#define TFT_RST   8
+
+// Config Touch Pins
+#if defined(XPT_TOUCH)
+#define CS_PIN  7
+#define TOUCH_SPI SPI1
+#else
+#define TOUCH_WIRE Wire
+#endif
+
+String DEFAULT_CITY = "Disneyland";
 ```
 6. Select your `Teensy 4.1` and port, then click **Upload**.

@@ -1,7 +1,28 @@
+
 // Screen state tracker: 0 = Main Dashboard, 1 = Day Detail Screen
 enum ScreenState { SCREEN_MAIN, SCREEN_DETAIL, SCREEN_KEYBOARD };
 ScreenState currentScreen = SCREEN_MAIN;
 int currentSelectedDay = -1;
+
+// Global state tracking
+enum AppState {
+  START,
+  FETCH_MAP_CITY_TO_LOCATION,
+  READ_MAP_CITY_TO_LOCATION,
+  FETCH_CURRENT,
+  READ_CURRENT,
+  FETCH_HOURLY,
+  READ_HOURLY,
+  FETCH_DAILY,
+  READ_DAILY,
+  FETCH_DAILY2,
+  READ_DAILY2,
+  FETCH_AIR_QUALITY,
+  READ_AIR_QUALITY,
+  DONE_APP
+};
+
+AppState appState = START;
 
 struct AQI_Category {
   uint16_t aqiMin;
