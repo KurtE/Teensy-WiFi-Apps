@@ -1,4 +1,4 @@
-# Project Name: Weather App for the Protosupplies Mini Platform For Teensy 4.1 (https://protosupplies.com/product/mini-platform-teensy41/)
+# Project Name: Weather App for the Protosupplies Mini Platform For Teensy 4.1 (https://protosupplies.com/product/mini-platform-teensy41/) or the ESP32-C5 Stack (https://protosupplies.com/product/teensy4-esp32c5-stacks/) or the C6 Stack (https://protosupplies.com/product/teensy4-esp32-stacks/)
 
 The Mini Platform features a ESP32-C3 as well as a ST7796 display with capacitive touch screen.  This allows the ESP32-C3 to handle all the WiFi connections to the Open-Meteo weather API.  The Teensy 4.1 handles the all the display and processing of the data received.  On the Teensy you input the City the you want.  The T4.1 sends the City request to the ESP32C3 which the retrieves and sends the weather data in JSON format back to the T41 for processing and displaying data. 
 
